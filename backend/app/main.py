@@ -16,7 +16,14 @@ from .models import EvidenceUpdate, RunCreate
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 app = FastAPI(title="KOI Recovery API", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1):517\d+",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def public_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -30,12 +37,19 @@ async def health() -> dict[str, str]:
 
 @app.get("/api/config")
 async def config() -> dict[str, Any]:
-    return {"ollama_key_configured": bool(os.getenv("OLLAMA_API_KEY", "").strip()), "model_configured": bool(os.getenv("OLLAMA_MODEL", "").strip()), "fixture_notice": "Fixture data is synthetic, not live transportation availability."}
+    key_ready = bool(os.getenv("OLLAMA_API_KEY", "").strip())
+    return {"ollama_key_configured": key_ready, "model_configured": bool(os.getenv("OLLAMA_MODEL", "").strip()), "web_search_configured": key_ready, "data_notice": "KOI researches live web sources. Confirm schedules, fares, and availability with the linked operator before booking."}
 
 
 @app.post("/api/runs", status_code=202)
 async def create_run(request: RunCreate) -> dict[str, Any]:
-    state = STORE.create(request.scenario_id, request.mode)
+    if request.mode == "live" and request.trip_details is None:
+        raise HTTPException(422, "Enter your flight, route, date, and budget before starting live research.")
+    try:
+        details = request.trip_details.model_dump(mode="json") if request.trip_details else None
+        state = STORE.create(request.scenario_id, request.mode, details)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     state["_task"] = asyncio.create_task(run_runner(state["run_id"]))
     return public_state(state)
 

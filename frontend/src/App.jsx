@@ -1,84 +1,177 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowRight, BadgeCheck, CalendarDays, Check, CircleAlert, Cloud, Download, Plane, RotateCcw, Sparkles, TrainFront, Wallet } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, CircleAlert, Clock3, Link2, MapPin, Plane, Search, Sparkles, TrainFront, Users, Wallet, X } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const FIXTURE_SOURCE_URL = 'https://github.com/Ena-AlexBrush/KOI/blob/main/backend/app/fixtures/scenarios.json';
-const initialEvents = [
-  {id:'hotel-check-in',name:'Hotel check-in',time:'3:00 PM',detail:'Flexible · Manhattan'},
-  {id:'presentation',name:'In-person presentation',time:'5:00 PM',detail:'Mandatory · Conference venue'},
-  {id:'dinner',name:'Dinner reservation',time:'7:30 PM',detail:'Flexible · Midtown'},
-];
-const labels={run_started:'Recovery started',agent_activated:'Agent activated',baseline:'Baseline comparison',round_started:'Deliberation round',agent_response:'Agent response',alternative_search_completed:'Alternative route search',votes_updated:'Plan votes updated',plan_validated:'Hard constraint check',multiple_acceptable_plans:'More than one plan is acceptable',consensus:'Consensus reached',evidence_updated:'New information',votes_invalidated:'Old votes cleared',deliberation_stopped:'Deliberation stopped',run_error:'Live run error',run_completed:'Run completed'};
+const agentInfo = {
+  Travel: { icon: Plane, color: 'blue', role: 'Flight status and replacement flights' },
+  Budget: { icon: Wallet, color: 'coral', role: 'Fares and lower-cost options' },
+  Commitments: { icon: CalendarDays, color: 'violet', role: 'Arrival deadline and important plans' },
+  Alternatives: { icon: TrainFront, color: 'green', role: 'Bus, train, ferry, and alternate airports' },
+};
 
-function Fish(){return <svg viewBox="0 0 48 38" aria-hidden="true" className="fish"><path d="M7 20c6-9 19-13 29-6l8-7v25l-9-7C24 32 13 29 7 20Z" fill="currentColor"/><circle cx="30" cy="17" r="1.8" fill="white"/><path d="M4 20h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>}
-function CloudDecor(){return <div className="cloud-decor" aria-hidden="true"><Cloud/><Cloud/><span className="flight-line"/></div>}
-function money(v){return v==null?'—':`$${Number(v).toLocaleString()}`}
-function time(value){if(!value)return '—';return new Date(value).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York',timeZoneName:'short'})}
-function statusName(value){return ({running:'Agents are thinking',consensus:'A shared plan is ready',keep_disagreement:'The agents still disagree',needs_human:'Your decision is needed',error:'The live run hit an error'})[value]||value||'Waiting to start'}
-function FixtureCitation({sourceId}){return <a href={FIXTURE_SOURCE_URL} target="_blank" rel="noreferrer" style={{color:'#5286a3',textDecoration:'underline'}}>{sourceId}</a>}
-function ToolResultSummary({call,result}){
-  if(!result)return <span>No result recorded.</span>;
-  if(result.error)return <span>Tool error: {result.error}</span>;
-  if(Array.isArray(result.routes))return <div>{result.routes.length?result.routes.map(route=><p key={route.id}><b>{route.name}</b> · {money(route.total_cost_usd)} · venue {time(route.venue_arrival)} · <FixtureCitation sourceId={route.source_id}/></p>):<p>No routes found.</p>}</div>;
-  if(result.route_option_id){
-    const sourceId=`fixture-${result.route_option_id}`;
-    if('arrives_before_mandatory_event' in result)return <span>{money(result.cost_usd)} against {money(result.budget_usd)} budget · venue {time(result.venue_arrival)} · {result.arrives_before_mandatory_event?'before':'after'} mandatory event · {result.within_budget?'within':'over'} budget · <FixtureCitation sourceId={sourceId}/></span>;
-    return <span>{money(result.cost_usd)} against {money(result.budget_usd)} budget · leg costs {result.leg_costs_usd?.map(money).join(' + ')} · <FixtureCitation sourceId={sourceId}/></span>;
-  }
-  if(result.flexible_events)return <span>Flexible events: {result.flexible_events.join(', ')} · mandatory: {result.mandatory_events.join(', ')}</span>;
-  return <span>{call.tool_name} completed.</span>;
-}
+function localDate(){const now=new Date();const local=new Date(now.getTime()-now.getTimezoneOffset()*60000);return local.toISOString().slice(0,10)}
+function prettyDate(value){if(!value)return '';return new Date(`${value}T12:00:00`).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'})}
+function groupByRound(responses){const groups=new Map();for(const response of responses||[]){const items=groups.get(response.round_number)||[];items.push(response);groups.set(response.round_number,items)}return [...groups.entries()].sort((a,b)=>a[0]-b[0])}
+function priceAmount(value){const match=String(value||'').replaceAll(',','').match(/\$?\s*(\d+(?:\.\d+)?)/);return match?Number(match[1]):null}
+function googleFlightsSearchUrl(trip){return `https://www.google.com/travel/flights?q=${encodeURIComponent(`Flights from ${trip.origin} to ${trip.destination} on ${trip.travel_date}`)}`}
+function googleSearchUrl(trip){return `https://www.google.com/search?q=${encodeURIComponent(`${trip.origin} to ${trip.destination} flights bus train ${trip.travel_date}`)}`}
 
 export default function App(){
-  const [run,setRun]=useState(null),[events,setEvents]=useState([]),[config,setConfig]=useState(null),[scenario,setScenario]=useState('nyc_recovery'),[busy,setBusy]=useState(false),[connection,setConnection]=useState('disconnected'),[message,setMessage]=useState('');
-  const stream=useRef(null),bottom=useRef(null);
+  const [form,setForm]=useState({flight_number:'',airline:'',origin:'',destination:'',travel_date:localDate(),budget_usd:'300',arrive_by:'',important_plans:''});
+  const [run,setRun]=useState(null),[config,setConfig]=useState(null),[busy,setBusy]=useState(false),[connection,setConnection]=useState('disconnected'),[message,setMessage]=useState('');
+  const [agentProgress,setAgentProgress]=useState({}),[selectedOptionIndex,setSelectedOptionIndex]=useState(0),[acceptedOption,setAcceptedOption]=useState(null),[noOptionsLeft,setNoOptionsLeft]=useState(false);
+  const stream=useRef(null);
   const responses=run?.responses||[];
-  const rounds=useMemo(()=>{const map=new Map();for(const item of responses){const arr=map.get(item.round_number)||[];arr.push(item);map.set(item.round_number,arr)}return [...map.entries()].sort((a,b)=>a[0]-b[0])},[responses]);
+  const rounds=useMemo(()=>groupByRound(responses),[responses]);
+  const sources=run?.web_sources||[];
+
   useEffect(()=>{fetch(`${API}/api/config`).then(r=>r.json()).then(setConfig).catch(()=>setConfig({offline:true}));return()=>stream.current?.close()},[]);
-  useEffect(()=>{bottom.current?.scrollIntoView({behavior:'smooth',block:'end'})},[events.length,responses.length]);
-  async function refresh(id){const r=await fetch(`${API}/api/runs/${id}`);if(!r.ok)throw Error('Could not load this recovery run.');setRun(await r.json())}
-  function connect(id){stream.current?.close();setConnection('connecting');const es=new EventSource(`${API}/api/runs/${id}/events?after=0`);stream.current=es;es.onopen=()=>setConnection('connected');es.onerror=()=>setConnection('disconnected');es.onmessage=async e=>{try{const item=JSON.parse(e.data);setEvents(prev=>[...prev,item]);setRun(current=>{if(!current)return current;const data=item.data||{};if(item.type==='agent_response')return {...current,responses:[...(current.responses||[]),data]};if(item.type==='agent_activated')return {...current,active_agents:[...new Set([...(current.active_agents||[]),data.agent])],activations:[...(current.activations||[]),data]};if(item.type==='baseline')return {...current,baseline:data};if(item.type==='evidence_updated'){return {...current,evidence_version:data.evidence_version,scenario:{...current.scenario,options:current.scenario.options.map(o=>o.id===data.option_id?{...o,available:false}:o)},consensus_plan:null,votes:[]}}if(item.type==='consensus')return {...current,status:'consensus',consensus_plan:data.plan};if(item.type==='run_error')return {...current,status:'error',error:data.message};if(item.type==='run_completed')return {...current,status:data.status,elapsed_ms:data.elapsed_ms};return current});if(item.type==='run_completed'){es.close();await refresh(id);setBusy(false);setConnection('complete')}}catch{}}}
-  async function start(mode='live'){
-    setBusy(true);setMessage('');setEvents([]);setRun(null);stream.current?.close();
-    try{const r=await fetch(`${API}/api/runs`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario_id:scenario,mode})});if(!r.ok)throw Error((await r.text()).slice(0,300));const value=await r.json();setRun(value);connect(value.run_id);setMessage(mode==='demo_playback'?'Demo Playback · scripted fixture responses; no live model call was made.':'Live agent mode · requests go to Ollama Cloud.');}
-    catch(e){setBusy(false);setMessage(`Backend unavailable: ${e.message}. Start the FastAPI server and retry.`)}
+  useEffect(()=>{if(run?.status!=='research_complete')return;const frame=requestAnimationFrame(()=>document.getElementById('decision')?.scrollIntoView({behavior:'smooth',block:'start'}));return()=>cancelAnimationFrame(frame)},[run?.status]);
+  function updateField(event){setForm(current=>({...current,[event.target.name]:event.target.value}))}
+  function connect(runId){
+    stream.current?.close();setConnection('connecting');
+    const streamConnection=new EventSource(`${API}/api/runs/${runId}/events?after=0`);stream.current=streamConnection;
+    streamConnection.onopen=()=>setConnection('connected');streamConnection.onerror=()=>setConnection('disconnected');
+    streamConnection.onmessage=async event=>{
+      try{
+        const item=JSON.parse(event.data),data=item.data||{};
+        setRun(current=>{
+          if(!current)return current;
+          if(item.type==='agent_response')return {...current,responses:[...(current.responses||[]),data]};
+          if(item.type==='web_research_completed'){
+            const known=new Set((current.web_sources||[]).map(source=>source.source_id));
+            const found=(data.sources||[]).filter(source=>!known.has(source.source_id));
+            return {...current,web_sources:[...(current.web_sources||[]),...found]};
+          }
+          if(item.type==='run_error')return {...current,status:'error',error:data.message};
+          if(item.type==='run_completed')return {...current,status:data.status,elapsed_ms:data.elapsed_ms};
+          return current;
+        });
+        if(item.type==='web_search_started')setAgentProgress(Object.fromEntries((data.agents||[]).map(name=>[name,'Searching the web'])));
+        if(item.type==='web_research_completed')setAgentProgress(current=>({...current,[data.agent]:data.error?'Search failed':`${data.source_count||0} sources found`}));
+        if(item.type==='round_started')setMessage(item.data.round_number===0?'Agents are reviewing their web findings.':'Agents are comparing findings and responding to one another.');
+        if(item.type==='run_error')setMessage(data.message||'The live search did not complete.');
+        if(item.type==='run_completed'){
+          streamConnection.close();
+          let completedRun=null;
+          try{const result=await fetch(`${API}/api/runs/${runId}`);if(result.ok){completedRun=await result.json();setRun(completedRun)}}catch{}
+          setBusy(false);setConnection('complete');
+          setMessage(completedRun?.limited_mode?'Ollama did not finish; KOI is showing cited live search results. Verify details with the airline or operator.':data.status==='research_complete'?'Research complete. Confirm schedules and fares with the linked operators.':data.message||'Run finished.');
+        }
+      }catch{}
+    };
   }
-  async function injectEvidence(){if(!run)return;setMessage('Adding new evidence and requesting a fresh agent assessment…');try{const r=await fetch(`${API}/api/runs/${run.run_id}/evidence`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'option_c_unavailable'})});if(!r.ok)throw Error((await r.json()).detail||'Could not add evidence');setBusy(true);await refresh(run.run_id)}catch(e){setMessage(e.message)}}
-  async function download(){if(!run)return;try{const r=await fetch(`${API}/api/runs/${run.run_id}/export`);const data=await r.json();const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`koi-${run.run_id}.json`;a.click();URL.revokeObjectURL(a.href)}catch{setMessage('Could not download the run history.')}}
-  const finalPlan=run?.consensus_plan;const route=finalPlan&&run?.scenario?.options?.find(x=>x.id===finalPlan.route_option_id);
-  const canInject=run?.scenario?.options?.some(o=>o.id==='option-c'&&o.available);
-  const runError=run?.error||events.find(e=>e.type==='run_error')?.data?.message;
+  async function startResearch(event){
+    event.preventDefault();setBusy(true);setMessage('Preparing live web research…');setRun(null);setAgentProgress({});setSelectedOptionIndex(0);setAcceptedOption(null);setNoOptionsLeft(false);stream.current?.close();
+    const tripDetails={
+      flight_number:form.flight_number.trim(),airline:form.airline.trim(),origin:form.origin.trim(),destination:form.destination.trim(),
+      travel_date:form.travel_date,budget_usd:Number(form.budget_usd),arrive_by:form.arrive_by||null,
+      important_plans:form.important_plans.split('\n').map(line=>line.trim()).filter(Boolean),
+    };
+    try{
+      const response=await fetch(`${API}/api/runs`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'live',trip_details:tripDetails})});
+      if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.detail||`Request failed (${response.status})`)}
+      const value=await response.json();setRun(value);connect(value.run_id);setMessage('Live web searches are starting.');
+      document.getElementById('research')?.scrollIntoView({behavior:'smooth',block:'start'});
+    }catch(error){setBusy(false);setMessage(`Could not start research: ${error.message}`)}
+  }
+  function jumpTo(id){const target=document.getElementById(id);if(target?.tagName==='DETAILS')target.open=true;if(id==='research'){const disclosure=target?.querySelector('.research-disclosure');if(disclosure)disclosure.open=true}target?.scrollIntoView({behavior:'smooth',block:'start'})}
+  const latestResponses=responses.filter(item=>item.round_number===(rounds.at(-1)?.[0]??-1));
+  const allFindings=latestResponses.flatMap(response=>(response.findings||[]).map(finding=>({...finding,agent_name:response.agent_name})));
+  const visibleFindings=allFindings.slice(0,3);
+  const additionalFindings=allFindings.slice(3);
+  const rankedOptions=useMemo(()=>{
+    const unique=[];const seen=new Set();
+    for(const finding of allFindings){if(!finding.source_ids?.length)continue;const key=`${finding.title}|${finding.transport_mode}`.toLowerCase();if(!seen.has(key)){seen.add(key);unique.push(finding)}}
+    const budget=Number(run?.trip_details?.budget_usd);
+    return unique.sort((a,b)=>{
+      const score=item=>{const amount=priceAmount(item.price);return (item.booking_source_id?25:0)+(item.source_ids?.length?20:0)+(amount!==null?(amount<=budget?50:-50):0)+(item.arrival?5:0)};
+      return score(b)-score(a)||(priceAmount(a.price)??Infinity)-(priceAmount(b.price)??Infinity);
+    });
+  },[allFindings,run?.trip_details?.budget_usd]);
+  const selectedOption=rankedOptions[selectedOptionIndex];
+  const bookingSource=selectedOption?.booking_source_id?sources.find(source=>source.source_id===selectedOption.booking_source_id):null;
+  const acceptedBookingSource=acceptedOption?.booking_source_id?sources.find(source=>source.source_id===acceptedOption.booking_source_id):null;
+  const selectedSources=(selectedOption?.source_ids||[]).map(id=>sources.find(source=>source.source_id===id)).filter(Boolean);
+  const decisionPanel=run?.status==='research_complete'&&<section className="decision-section" id="decision" aria-live="polite"><div className="section-header"><div><span className="section-kicker">YOUR NEXT STEP</span><h2>{run.limited_mode?'Review live search results':'Choose a recovery option'}</h2><p>{run.limited_mode?'These are cited search leads; verify service details and availability.':'Options are ordered by budget fit and available source evidence.'}</p></div>{rankedOptions.length>0&&<div className="round-count">Option {Math.min(selectedOptionIndex+1,rankedOptions.length)} of {rankedOptions.length}</div>}</div>
+    {!rankedOptions.length?<div className="research-empty compact"><CircleAlert size={20}/><b>No source-backed option found</b><p>The agents couldn’t verify a specific flight, bus, or train from their web results. Check the sources or search again.</p></div>:acceptedOption?<div className="accepted-option"><div className="plane-flight" aria-hidden="true"><Plane size={34}/><span/></div><div><span className="section-kicker">OPTION SELECTED</span><h3>{acceptedOption.title}</h3><p>{acceptedOption.summary}</p>{acceptedBookingSource?<a className="primary ticket-link" href={acceptedBookingSource.url} target="_blank" rel="noreferrer">Open exact itinerary <ArrowUpRight size={18}/></a>:<p className="no-booking-link">No direct purchase page was verified. Use the cited source to check this service with the operator.</p>}<SourceLinks sourceIds={acceptedOption.source_ids} sources={sources}/></div></div>:noOptionsLeft?<div className="research-empty compact"><X size={20}/><b>You’ve reviewed all {rankedOptions.length} options</b><p>Revisit an option above or search again with different trip details.</p><button className="decision-secondary" onClick={()=>{setSelectedOptionIndex(0);setNoOptionsLeft(false)}}>Show the top option</button></div>:<article className="best-option-card"><div className="best-option-label"><Sparkles size={17}/>{run.limited_mode?'LIVE WEB RESULT · VERIFY DETAILS':'BEST AVAILABLE OPTION'}</div><div className="finding-top"><span>{selectedOption.transport_mode||'Travel option'}</span><small>{run.limited_mode?`Source result · ${selectedOption.agent_name}`:`Recommended by ${selectedOption.agent_name}`}</small></div><h3>{selectedOption.title}</h3><p>{selectedOption.summary}</p><div className="finding-meta">{selectedOption.price&&<span><Wallet size={14}/>{selectedOption.price}</span>}{selectedOption.departure&&<span><Clock3 size={14}/>Leaves {selectedOption.departure}</span>}{selectedOption.arrival&&<span><MapPin size={14}/>Arrives {selectedOption.arrival}</span>}</div>{bookingSource?<a className="direct-booking-link" href={bookingSource.url} target="_blank" rel="noreferrer"><Link2 size={14}/>{bookingSource.title}<ArrowUpRight size={13}/></a>:<div className="source-links">{selectedSources.map(source=><a href={source.url} target="_blank" rel="noreferrer" key={source.source_id}><Link2 size={13}/>{source.title}<ArrowUpRight size={12}/></a>)}</div>}{run.limited_mode&&<div className="source-links"><a href={googleFlightsSearchUrl(run.trip_details)} target="_blank" rel="noreferrer">Search this route on Google Flights <ArrowUpRight size={12}/></a><a href={googleSearchUrl(run.trip_details)} target="_blank" rel="noreferrer">Search the route on Google <ArrowUpRight size={12}/></a></div>}<div className="decision-buttons"><button className="primary" onClick={()=>setAcceptedOption(selectedOption)}><Check size={18}/>{run.limited_mode?'Open selected source':'Yes, this works'}</button><button className="decision-secondary" onClick={()=>{if(selectedOptionIndex+1>=rankedOptions.length)setNoOptionsLeft(true);else setSelectedOptionIndex(index=>index+1)}}><X size={18}/>{selectedOptionIndex+1>=rankedOptions.length?'No, finish reviewing':'No, show next option'}</button></div></article>}
+  </section>;
 
-  return <main className="app-shell"><CloudDecor/><header className="topbar"><a href="#top" className="brand"><span className="fish-wrap"><Fish/></span><span>koi</span></a><span className="brand-note">TRAVEL, WITH A PLAN B</span><div className="status-pill"><span className={`status-dot ${connection}`}/>{connection==='connected'?'Live stream':connection==='connecting'?'Connecting':connection==='complete'?'Run complete':'Ready'}</div></header>
-    <section className="hero" id="top"><div className="eyebrow"><Sparkles size={15}/> DISRUPTION RECOVERY, MADE HUMAN</div><h1>A disaster is one change away.<br/><em>Recovery is one decision away.</em></h1><p>When travel changes, the rest of your plans shouldn’t unravel. KOI brings a team of focused agents together to find the next best move.</p><div className="hero-buttons"><button className="primary" disabled={busy} onClick={()=>start('live')}><Plane size={17}/>{busy?'Agents are working':'Trigger flight cancellation'}<ArrowRight size={16}/></button><button className="secondary" disabled={busy} onClick={()=>start('demo_playback')}><Sparkles size={16}/>Demo Playback</button></div><div className="availability">{config?.offline?<><CircleAlert size={15}/> API connection unavailable</>:config?.ollama_key_configured&&config?.model_configured?<><span className="green-dot"/> Ollama Cloud is configured for live calls</>:<><CircleAlert size={15}/> Live mode needs OLLAMA_API_KEY and a verified OLLAMA_MODEL</>}</div></section>
+  return <main className="app-shell">
+    <header className="topbar"><a href="#top" className="brand" aria-label="KOI home">KOI<span className="brand-mark">●</span></a><div className="status-pill"><span className={`status-dot ${connection}`}/>{connection==='connected'?'Connected':connection==='connecting'?'Connecting':connection==='complete'?'Research complete':'Ready'}</div></header>
 
-    {message&&<div className={`notice ${message.startsWith('Backend')||message.includes('failed')?'error':'info'}`} role="status">{message}</div>}
-    {runError&&<div className="notice error"><CircleAlert size={17}/><span><b>Live agent error:</b> {runError} Live errors are not replaced with demo results.</span></div>}
+    <section className="hero" id="top"><div className="eyebrow"><Sparkles size={16}/> TRAVEL DISRUPTION ASSISTANT</div><h1>KOI</h1><p className="tagline">Your flight changed. Find your next way forward.</p><p className="hero-copy">Share your flight details. KOI checks live travel options and compares alternatives.</p></section>
 
-    <section className="scenario-row"><div><span className="section-kicker">YOUR TRIP</span><h2>San Francisco <ArrowRight size={19}/> New York</h2><p>Saturday, October 10 <span className="fixture-tag">SYNTHETIC SCENARIO</span></p></div><label className="scenario-select">Scenario<select value={scenario} onChange={e=>setScenario(e.target.value)} disabled={busy}><option value="nyc_recovery">NYC recovery · $300 budget</option><option value="infeasible">Infeasible · $180 budget</option></select></label></section>
+    <nav className="page-nav" aria-label="Page sections"><button onClick={()=>jumpTo('trip')}>Trip details</button>{run?.status==='research_complete'&&<button onClick={()=>jumpTo('decision')}>Best match</button>}<button onClick={()=>jumpTo('research')}>How it works</button>{run&&<button onClick={()=>jumpTo('sources')}>More options</button>}</nav>
 
-    <section className="journey-grid"><article className="card itinerary-card"><div className="card-heading"><div><span className="section-kicker">THE CASCADING EFFECT</span><h2>One cancellation. Three ripple effects.</h2></div><span className="trip-icon"><Plane size={19}/></span></div><div className="route-card"><div className="route-main"><div className="airport"><b>SFO</b><small>San Francisco</small></div><div className="route-dash"><span/><Plane size={17}/><span/></div><div className="airport right"><b>NYC</b><small>New York</small></div></div><div className="cancel-banner">{run?<><CircleAlert size={15}/> Original flight cancelled <span>· disruption detected</span></>:<><Plane size={15}/> Original flight scheduled <span>· ready to simulate cancellation</span></>}</div></div><div className="events-list">{initialEvents.map((e,i)=><div className={`event-row ${i===1?'mandatory':''}`} key={e.id}><span className="event-line"><i/></span><div className="event-copy"><b>{e.name}</b><small>{e.detail}</small></div><time>{e.time}</time></div>)}</div><div className="budget-strip"><Wallet size={17}/><span>Hard recovery limit</span><b>{money(run?.scenario?.budget_usd|| (scenario==='infeasible'?180:300))}</b></div></article>
+    {message&&<div className={`notice ${message.startsWith('Could not')?'error':'info'}`} role="status">{message.startsWith('Could not')&&<CircleAlert size={17}/>}<span>{message}</span></div>}
+    {run?.error&&<div className="notice error"><CircleAlert size={17}/><span>{run.error}</span></div>}
 
-      <article className="card team-card"><div className="card-heading"><div><span className="section-kicker">A TEAM WITH DIFFERENT PRIORITIES</span><h2>Four minds. One recovery.</h2></div><span className="team-orbit">✳</span></div><div className="agent-list">{[
-        ['Travel','Find the earliest arrival','✈','#e5f4ff'],['Budget','Keep every leg in bounds','◉','#fff0e8'],['Commitments','Protect what matters most','▣','#f1edff'],['Alternatives','Search beyond the original route','↗','#e7f6ef']
-      ].map(([name,desc,icon,color])=>{const active=run?.active_agents?.includes(name);const activation=run?.activations?.find(a=>a.agent===name);return <div key={name} className={`agent-item ${active?'active':''} ${name==='Alternatives'&&active?'activated':''}`}><span className="agent-icon" style={{background:color}}>{icon}</span><div><b>{name}</b><small>{activation?.reason||desc}</small></div><span className={`agent-state ${active?'on':''}`}>{active?'ACTIVE':'ON CALL'}</span></div>})}</div><div className="agent-footnote"><span className="pulse"/> {run?statusName(run.status):'The right agents join as the situation unfolds.'}</div></article></section>
-
-    <section className="conversation-section"><div className="section-top"><div><span className="section-kicker">LIVE NEGOTIATION</span><h2>Watch the team work it out.</h2><p>Every proposal, tool result, and vote is linked to its evidence version.</p></div><div className="conversation-actions"><button className="small-button" disabled={!run} onClick={injectEvidence}><Sparkles size={15}/> New information: Option C unavailable</button><button className="icon-button" disabled={!run} onClick={download} aria-label="Download JSON history"><Download size={17}/></button><button className="icon-button" disabled={busy} onClick={()=>{setRun(null);setEvents([]);setMessage('');stream.current?.close();setConnection('disconnected')}} aria-label="Reset"><RotateCcw size={16}/></button></div></div>
-      <div className="rounds-wrap">{!run&&<div className="empty-state"><span className="empty-icon"><Sparkles size={25}/></span><b>The conversation appears here</b><p>Start a live run or use clearly marked Demo Playback to see proposals and objections arrive in real time.</p></div>}
-        {rounds.map(([round,items])=><div className="round-block" key={round}><div className="round-title"><span>ROUND {round}</span><i/>{round===0?'Initial proposals':'Responses to peer messages'}</div><div className="response-grid">{items.map(r=><ResponseCard key={r.message_id} response={r}/>)}</div></div>)}
-        {events.filter(e=>['alternative_search_completed','votes_updated','evidence_updated','votes_invalidated','deliberation_stopped','run_completed'].includes(e.type)).map(e=><EventCard key={e.id} item={e}/>)}<div ref={bottom}/></div>
+    <section className="trip-layout" id="trip">
+      <div className="trip-intro"><span className="section-kicker">START HERE</span><h2>Find another way there.</h2><p>Enter your cancelled flight. KOI looks for live alternatives.</p><p className="required-hint">Required: flight number, airline, route, and date.</p><details className="privacy-note"><summary>How KOI uses your details</summary><p>Your flight number, airline, route, date, and preferences go to Ollama Cloud for live web searches and agent analysis. Do not enter a booking reference or passenger personal information.</p></details></div>
+      <form className="trip-form" onSubmit={startResearch}>
+        <div className="form-heading"><div><span className="section-kicker">CANCELLED FLIGHT</span><h3>Flight details</h3></div><Plane size={22}/></div>
+        <div className="form-grid">
+          <label>Flight number<input name="flight_number" value={form.flight_number} onChange={updateField} placeholder="e.g. UA 123" required maxLength="16" disabled={busy}/></label>
+          <label>Airline<input name="airline" value={form.airline} onChange={updateField} placeholder="e.g. United Airlines" required maxLength="80" disabled={busy}/></label>
+          <label>Leaving from<input name="origin" value={form.origin} onChange={updateField} placeholder="City or airport" required disabled={busy}/></label>
+          <label>Going to<input name="destination" value={form.destination} onChange={updateField} placeholder="City or airport" required disabled={busy}/></label>
+          <label>Travel date<input type="date" name="travel_date" value={form.travel_date} onChange={updateField} required disabled={busy}/></label>
+        </div>
+        <details className="advanced-preferences"><summary><span><b>More preferences</b><small>Budget, arrival time, or plans (optional)</small></span><ChevronDown size={18}/></summary><div className="form-grid advanced-grid">
+          <label>Maximum budget (USD)<span className="optional-label">Default: $300</span><input type="number" name="budget_usd" min="1" max="100000" value={form.budget_usd} onChange={updateField} required disabled={busy}/></label>
+          <label className="full-field">Need to arrive by <span className="optional-label">Optional</span><input name="arrive_by" value={form.arrive_by} onChange={updateField} placeholder="e.g. 4:30 PM" maxLength="120" disabled={busy}/></label>
+          <label className="full-field">Important plans to protect <span className="optional-label">Optional · one per line</span><textarea name="important_plans" value={form.important_plans} onChange={updateField} placeholder={'e.g. 5 PM presentation\nDinner at 7:30 PM'} rows="3" disabled={busy}/></label>
+        </div></details>
+        <button className="primary submit-button" type="submit" disabled={busy||!config||config.offline||!config.ollama_key_configured||!config.model_configured}><Search size={19}/>{busy?'Agents are searching…':'Search live options'}<ArrowRight size={18}/></button>
+        <div className="form-footnote">{config?.offline?'KOI is offline. Start the backend to continue.':config?.ollama_key_configured&&config?.model_configured?'Ready to search for alternatives.':'KOI needs setup before you can search.'}</div>
+      </form>
     </section>
 
-    <section className="results-grid"><article className="card result-card"><div className="card-heading"><div><span className="section-kicker">RECOVERY DECISION</span><h2>{statusName(run?.status)}</h2></div>{run?.status==='consensus'?<span className="success-badge"><Check size={14}/>UNANIMOUS</span>:run?.status==='needs_human'?<span className="human-badge"><CircleAlert size={14}/>YOUR CALL</span>:null}</div>
-      {route&&<><div className="recommended-route"><div className="route-symbol"><TrainFront size={20}/></div><div><b>{route.name}</b><small>{route.method} · {route.legs?.length||0} legs · synthetic route</small></div><strong>{money(route.total_cost_usd)}</strong></div><div className="arrival-row"><span>Venue arrival</span><b>{time(route.venue_arrival)}</b><span className="on-time"><Check size={14}/> 30 min before presentation</span></div><div className="leg-list">{route.legs?.map((leg,i)=><div className="leg" key={i}><span className="leg-number">{i+1}</span><div><b>{leg.mode}</b><small>{leg.from} → {leg.to}</small></div><time>{time(leg.depart)} – {time(leg.arrive)}</time><strong>{money(leg.cost_usd)}</strong></div>)}</div><div className="commitment-plan"><span className="section-kicker">REVISED ITINERARY</span>{finalPlan?.commitment_changes?.map((change,i)=><div className="commitment-change" key={i}><CalendarDays size={14}/><span><b>{change.event_id.replaceAll('-',' ')}</b><small>{change.before} → {change.after} · {change.reason}</small></span></div>)}</div><div className="approval-note"><BadgeCheck size={17}/><span>Recommendation only. Booking stays simulated and requires your explicit approval.</span></div></>}
-      {!route&&<div className={`decision-empty ${run?.status==='needs_human'?'human':''}`}><b>{run?.status==='needs_human'?'No route meets both hard constraints.':'A feasible recovery will show here.'}</b><p>{run?.status==='needs_human'?`The remaining route set has no option that meets both the ${money(run?.scenario?.budget_usd)} budget and the mandatory 5 PM presentation. KOI will not change either constraint for you.`:`The agents are checking each exact plan against the ${money(run?.scenario?.budget_usd||300)} budget and 5 PM presentation.`}</p>{run?.missing_information?.map(x=><span className="missing-chip" key={x}>{x}</span>)}</div>}
-    </article>
-      <article className="card baseline-card"><div className="card-heading"><div><span className="section-kicker">SIMPLE BASELINE</span><h2>Cheapest replacement flight</h2></div><span className="baseline-mark">↘</span></div><p className="muted">Same currently available evidence. Chooses the lowest fare without negotiation.</p>{run?.baseline?<><div className="baseline-value"><b>{money(run.baseline.total_cost_usd)}</b><span>{run.baseline.name}</span></div><div className="baseline-metrics"><Metric label="Venue arrival" value={time(run.baseline.venue_arrival)}/><Metric label="Mandatory events missed" value={run.baseline.missed_mandatory_events?.length||0} danger={!!run.baseline.missed_mandatory_events?.length}/><Metric label="Hard constraint issues" value={run.baseline.hard_constraint_violations?.length||0} danger={!!run.baseline.hard_constraint_violations?.length}/><Metric label="Execution time" value={`${run.baseline.execution_ms} ms`}/></div></>:<div className="baseline-placeholder">Baseline metrics appear when a recovery run starts.</div>}<div className="compare-note"><ArrowDown size={15}/> In this scenario, the cheapest flight is under budget but reaches the venue after the presentation.</div></article></section>
+    {decisionPanel}
 
-    <footer><span className="footer-brand"><Fish/> koi</span><span>Synthetic transportation data · No live availability or bookings</span><span>KOI · Cisco Cloud AI</span></footer>
+    <section className="research-section" id="research">
+      {busy&&<div className="thinking-panel" role="status" aria-live="polite"><div className="thinking-orbit"><span/><span/><span/><Search size={23}/></div><div><b>{responses.length?'Checking the best options':'Searching live travel options'}</b><div className="thinking-progress"><i/></div></div><span className="thinking-label">LIVE</span></div>}
+      <details className="research-disclosure"><summary><span><b>How KOI found this recommendation</b><small>{run?`${responses.length} updates from 4 agents`:'See how the travel search works'}</small></span><ChevronDown size={19}/></summary><div className="research-content">
+      <div className="section-header"><div><span className="section-kicker">LIVE INVESTIGATION</span><h2>Agent research</h2><p>Four agents cross-check travel options.</p></div><div className="round-count"><Users size={17}/>{run?`${responses.length} updates`:'4 agents'}</div></div>
+
+      <details className="agent-team"><summary><span className="team-summary-icon"><Users size={18}/></span><span><b>Meet the agent team</b><small>Open to see what each agent searches for</small></span><ChevronDown size={18}/></summary><div className="team-grid">{Object.entries(agentInfo).map(([name,info])=>{const Icon=info.icon;const active=run?.active_agents?.includes(name);return <article className={`team-member ${active?'is-active':''}`} key={name}><span className={`agent-icon ${info.color}`}><Icon size={19}/></span><div><b>{name}</b><small>{info.role}</small><em>{agentProgress[name]|| (active?'Ready to search':'Waiting')}</em></div></article>})}</div></details>
+
+      {!run&&<div className="research-empty"><Search size={22}/><b>Your research will appear here</b><p>Submit flight details to start live web searches and agent discussions.</p></div>}
+      {run&&rounds.map(([round,items])=><details className="round-block round-details" key={round}><summary><span>Round {round+1}</span>{round===0?'Initial research':'Peer review'} · {items.length} short updates<ChevronDown size={17}/></summary><div className="response-grid">{items.map(response=><ResponseCard key={response.message_id} response={response} sources={sources}/>)}</div></details>)}
+      {run?.status==='research_complete'&&<div className="completion-note"><Check size={18}/><span><b>Research complete.</b> Confirm the current fare and schedule before booking.</span></div>}
+      </div></details>
+    </section>
+
+    <details className="findings-section sources-disclosure" id="sources">
+      <summary><span><b>More options and web sources</b><small>{sources.length?`${allFindings.length} options · ${sources.length} sources`:'See other travel options and where they came from'}</small></span><ChevronDown size={19}/></summary><div className="sources-content">
+      <div className="section-header"><div><span className="section-kicker">WEB EVIDENCE</span><h2>Other options</h2><p>Open an option to see its details and sources.</p></div><div className="round-count"><Link2 size={17}/>{sources.length} sources</div></div>
+      {!sources.length?<div className="research-empty compact"><Link2 size={20}/><b>Sources appear when a live search starts</b></div>:<>
+        {visibleFindings.length>0&&<div className="findings-grid">{visibleFindings.map((finding,index)=><article className="finding-card" key={`${finding.agent_name}-${index}`}><div className="finding-top"><span>{finding.transport_mode||'Travel option'}</span><small>{finding.agent_name}</small></div><h3>{finding.title}</h3><div className="finding-meta">{finding.price&&<span><Wallet size={14}/>{finding.price}</span>}{finding.departure&&<span><Clock3 size={14}/>Leaves {finding.departure}</span>}{finding.arrival&&<span><MapPin size={14}/>Arrives {finding.arrival}</span>}</div><details className="finding-details"><summary>Details and sources</summary><p>{finding.summary}</p><SourceLinks sourceIds={finding.source_ids} sources={sources}/></details></article>)}</div>}
+        {additionalFindings.length>0&&<details className="more-findings"><summary>Show {additionalFindings.length} more options</summary><div className="findings-grid">{additionalFindings.map((finding,index)=><article className="finding-card" key={`${finding.agent_name}-extra-${index}`}><div className="finding-top"><span>{finding.transport_mode||'Travel option'}</span><small>{finding.agent_name}</small></div><h3>{finding.title}</h3><div className="finding-meta">{finding.price&&<span><Wallet size={14}/>{finding.price}</span>}{finding.departure&&<span><Clock3 size={14}/>Leaves {finding.departure}</span>}{finding.arrival&&<span><MapPin size={14}/>Arrives {finding.arrival}</span>}</div><details className="finding-details"><summary>Details and sources</summary><p>{finding.summary}</p><SourceLinks sourceIds={finding.source_ids} sources={sources}/></details></article>)}</div></details>}
+        <details className="all-sources"><summary>View all {sources.length} web sources</summary><div className="source-list">{sources.map(source=><article className="source-card" key={source.source_id}><span className="source-number">{source.source_id.replace('web-','')}</span><div><a href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={14}/></a><p>{source.snippet||'No preview available. Open the source to review its details.'}</p>{source.page_excerpt&&<details className="page-excerpt"><summary>Read fetched page excerpt</summary><p>{source.page_excerpt}</p></details>}<small>Found by {(source.found_by||[]).join(', ')} · retrieved {new Date(source.retrieved_at).toLocaleTimeString()}</small></div></article>)}</div></details>
+      </>}
+      </div>
+    </details>
+
+    <footer><span className="footer-brand">KOI</span><span>Live web search · Confirm fare and availability with the operator</span><span>KOI · Cisco Cloud AI</span></footer>
   </main>
 }
 
-function ResponseCard({response:r}){return <article className={`response-card agent-${r.agent_name.toLowerCase()}`}><div className="response-head"><span className="response-agent">{r.agent_name}</span><span className={`call-status ${r.call_status}`}>{r.call_status.replace('_',' ')}</span></div><p>{r.reason}</p>{r.proposed_plan&&<div className="proposal-chip"><span>PROPOSES</span><b>{r.proposed_plan.route_option_id.replace('option-','Option ').toUpperCase()}</b><small>{r.proposed_plan.plan_id} · v{r.proposed_plan.plan_version}</small></div>}{r.objections?.map((o,i)=><div className="objection" key={i}><b>Objection · {o.challenged_plan_id}</b><span>{o.concern}</span><small>Needs: {o.resolution_needed}</small></div>)}{r.proposal_changed&&<div className="changed"><RotateCcw size={13}/>{r.change_reason}</div>}{r.missing_information?.length>0&&<div className="missing-chip">Needs information: {r.missing_information.join(', ')}</div>}{r.error&&<div className="response-error">{r.error}</div>}<details><summary>Evidence, replies &amp; tool trace <ArrowDown size={13}/></summary><div className="trace"><p><b>Evidence v{r.evidence_version}</b> · {r.phase.replace('_',' ')} · {r.timestamp?new Date(r.timestamp).toLocaleTimeString():''}</p>{r.in_reply_to?.length>0&&<p><b>Replies to:</b> {r.in_reply_to.length} peer message(s)</p>}{r.supporting_facts?.length>0&&<p><b>Fixture citations:</b> {r.supporting_facts.map((id,i)=><React.Fragment key={id}>{i>0?', ':''}<FixtureCitation sourceId={id}/></React.Fragment>)}<br/><span>KOI synthetic scenario data; no live travel website was queried.</span></p>}{r.tool_calls?.map((t,i)=><p key={i}><b>{t.tool_name}</b> · <ToolResultSummary call={t} result={r.tool_results?.[i]?.result?{...r.tool_results[i].result,error:r.tool_results[i].error}:r.tool_results?.[i]?.error?{error:r.tool_results[i].error}:null}/></p>)}{r.evaluations?.map((v,i)=><p key={i}><b>{v.decision.toUpperCase()}</b> · {v.plan_id} v{v.plan_version} · {v.reason}</p>)}</div></details></article>}
-function EventCard({item:e}){const data=e.data||{};if(e.type==='votes_updated')return <article className="event-card votes-card"><div className="event-card-head"><b>{labels[e.type]}</b><span>Evidence v{data.evidence_version} · Round {data.round_number}</span></div><div className="vote-pills">{data.votes?.map((v,i)=><span key={i} className={`vote ${v.decision}`}>{v.agent_name}: {v.decision.replace('_',' ')} <small>{v.plan_id}</small></span>)}</div></article>;if(e.type==='alternative_search_completed')return <article className="event-card alt-event"><span className="event-emoji">↗</span><div><b>Alternatives searched nearby airports and rail connections</b><p>Option C revealed · Philadelphia flight + Amtrak · $290 total · venue at 4:30 PM · Evidence v{data.evidence_version}</p><small>Fixture route only · includes four legs and all transfer costs</small></div></article>;if(e.type==='evidence_updated'||e.type==='votes_invalidated')return <article className="event-card evidence-event"><CircleAlert size={17}/><div><b>{labels[e.type]}</b><p>{data.reason||`Removed ${data.previous_votes?.length||0} old votes after the evidence changed.`}</p></div></article>;if(e.type==='deliberation_stopped')return <article className="event-card evidence-event"><CircleAlert size={17}/><div><b>{labels[e.type]} · {data.status?.replace('_',' ')}</b><p>{data.reason}</p></div></article>;if(e.type==='run_completed')return <div className="completed-line">Recovery run ended · {data.status?.replace('_',' ')} · {data.elapsed_ms} ms</div>;return null}
-function Metric({label,value,danger}){return <div className="metric"><span>{label}</span><b className={danger?'danger':''}>{value}</b></div>}
+function ResponseCard({response,sources}){
+  const cited=(response.supporting_facts||[]).map(id=>sources.find(source=>source.source_id===id)).filter(Boolean);
+  const brief=response.findings?.[0]?.summary||response.reason;
+  const statusLabel=response.call_status==='success'?'Reviewed':response.call_status==='fallback'?'Web results only':response.call_status.replaceAll('_',' ');
+  return <article className={`response-card agent-${response.agent_name.toLowerCase()}`}><div className="response-head"><span className="response-agent">{response.agent_name}</span><span className={`call-status ${response.call_status}`}>{statusLabel}</span></div><p className="agent-brief">{brief}</p><small className="agent-count">{response.findings?.length?response.call_status==='fallback'?`${response.findings.length} live source result${response.findings.length===1?'':'s'}`:`${response.findings.length} option${response.findings.length===1?'':'s'} reviewed`:'No verified option'}</small>
+    <details className="agent-details"><summary>Agent details</summary><div className="agent-details-body"><p>{response.reason}</p>
+      {response.findings?.length>0&&<div className="agent-findings">{response.findings.map((finding,index)=><div className="agent-finding" key={index}><b>{finding.title}</b><span>{finding.summary}</span><small>{finding.transport_mode}{finding.price?` · ${finding.price}`:''}{finding.arrival?` · arrives ${finding.arrival}`:''}</small><SourceLinks sourceIds={finding.source_ids} sources={sources}/></div>)}</div>}
+      {response.objections?.map((objection,index)=><div className="objection" key={index}><b>{objection.agent_name?`Question for ${objection.agent_name}`:'Concern'}</b><span>{objection.concern}</span><small>{objection.question}</small></div>)}
+      {response.proposal_changed&&<div className="changed">Revised after peer review · {response.change_reason}</div>}
+      {response.missing_information?.length>0&&<div className="missing-info"><b>Still to confirm</b><ul>{response.missing_information.map((item,index)=><li key={index}>{item}</li>)}</ul></div>}
+      {response.error&&<div className="response-error">{response.error}</div>}
+      <details className="response-sources"><summary><Link2 size={14}/>{cited.length?`${cited.length} cited sources`:'Search trace'}<ChevronDown size={15}/></summary><div className="trace"><p><b>Search query:</b> {response.tool_calls?.[0]?.arguments?.query}</p>{cited.map(source=><p key={source.source_id}><a href={source.url} target="_blank" rel="noreferrer">{source.title} <ArrowUpRight size={12}/></a></p>)}</div></details>
+    </div></details>
+  </article>
+}
+
+function SourceLinks({sourceIds=[],sources=[]}){const found=sourceIds.map(id=>sources.find(source=>source.source_id===id)).filter(Boolean);if(!found.length)return null;return <div className="source-links">{found.map(source=><a href={source.url} target="_blank" rel="noreferrer" key={source.source_id}><Link2 size={13}/>{source.source_id}<ArrowUpRight size={12}/></a>)}</div>}
