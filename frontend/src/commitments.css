@@ -1,0 +1,7 @@
+.commitment-plan{padding:12px 0 1px;border-bottom:1px solid #edf2f5}
+.commitment-plan>.section-kicker{margin-bottom:7px}
+.commitment-change{display:flex;align-items:flex-start;gap:8px;padding:6px 2px}
+.commitment-change>svg{color:#81a8bf;flex:none;margin-top:1px}
+.commitment-change>span{display:grid;gap:3px}
+.commitment-change b{font-size:9px;color:#537286;text-transform:capitalize}
+.commitment-change small{font-size:8px;line-height:1.45;color:#8da1ad}
