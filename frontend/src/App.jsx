@@ -17,8 +17,8 @@ function App() {
           {/* Logo */}
           <div className="flex items-center gap-2">
             <Fish size={32} className="text-[#ED897B]" />
-            <span className="text-3xl font-bold tracking-tight text-[#ED897B]">
-              koi.
+            <span className="font-display text-3xl tracking-tight text-[#ED897B]">
+              koi
             </span>
           </div>
 
@@ -49,7 +49,7 @@ function App() {
 
   {/* Sky Hero Banner */}
   <section
-    className="relative overflow-hidden rounded-3xl border border-[#D6EAF7] px-10 py-12 shadow-sm"
+    className="relative overflow-hidden rounded-3xl border border-[#D6EAF7] px-10 py-8 shadow-sm"
     style={{
       background:
         "linear-gradient(115deg, #FFFFFF 0%, #EAF5FD 45%, #C7E8FA 100%)",
@@ -64,7 +64,7 @@ function App() {
         Your plans, protected.
       </p>
 
-      <h1 className="text-4xl font-bold leading-tight tracking-tight text-[#ED897B] md:text-5xl">
+      <h1 className="font-display text-4xl leading-tight tracking-tight text-[#ED897B] md:text-5xl">
         One change.
         <br />
         Everything handled.
@@ -89,6 +89,7 @@ function App() {
 
     </div>
   </section>
+
 
 
 {/* Dashboard */}
