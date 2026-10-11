@@ -1,4 +1,3 @@
-
 # Koi
 
 Koi is an AI-powered disruption recovery assistant built for the UCSC AI Hackathon 2026 — Cisco Cloud AI Track (Level 2).
