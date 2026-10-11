@@ -2,16 +2,18 @@
 
 Your original backend is preserved in commit `6ba627e` on local branch
 `codex/koi-backend`. This branch starts from Anu's implementation at `7edf1c3`
-on `origin/main`. Only `codex/backend-integration` is intended to be pushed.
+on `origin/main`, then incorporates teammate commits through `02a4ca6` that arrived
+during verification (Anu's selection-only draft and frontend fixture citations).
+Only `codex/backend-integration` is intended to be pushed.
 Neither original implementation is replaced. No AGENTS.md files were present.
-All frontend files are unchanged.
+All frontend files match `origin/main` at `02a4ca6`; none were edited by this integration.
 
 ## Overlap and resolution
 
 | Area | Overlap | Integrated implementation |
 | --- | --- | --- |
 | HTTP | Create runs, poll results, introduce facts | Retain Anu's `/api/runs`, `/evidence`, `/responses`, SSE `/events`, `/export`, and auto-start. Do not add the competing `/runs` API. |
-| Schemas | Proposals, objections, votes, plan references | Retain `AgentDraft`, `AgentResponse`, `PlanRef`, `Evaluation`, agent names and JSON fields. Add the missing `AgentDraft.in_reply_to`. |
+| Schemas | Proposals, objections, votes, plan references | Retain `AgentDraft`, `AgentPlanSelection`, `AgentResponse`, `PlanRef`, `Evaluation`, agent names and JSON fields. Add the missing `AgentDraft.in_reply_to`. |
 | State | In-memory runs, history, plans, evidence | Keep Anu's `RunStore` and append-only events/responses. Port isolated snapshots and safe new-information handling. |
 | Selection | Core agents plus Alternatives | Retain Anu's capabilities and activation reasons. Use the supplied original method and validated complete plans. |
 | Validation | Budget, arrival, plan references | Adapt your Decimal cost, transfer, commitment-change, entry/transit, and missing-information checks to Anu's dataset in `app/validation.py`. |
@@ -24,6 +26,8 @@ All frontend files are unchanged.
 
 - `in_reply_to` is accepted, checked against prior peer IDs, and preserved in
   `AgentResponse`. Identity, round, message, and evidence metadata stay backend-owned.
+- Anu's latest selection-only draft is retained: the model chooses the exact plan
+  ID/version/route; the backend attaches its immutable complete commitment changes.
 - Plan IDs hash the route and complete commitment changes. Votes still reference
   `plan_id`, `plan_version`, and `evidence_version`; changed plans cannot reuse an
   earlier acceptance. Unknown plan/objection references and capabilities fail.
@@ -101,8 +105,8 @@ scripted playback return 409; submit them after playback completes.
 
 ## Setup and checks
 
-Integration verification: **47 backend tests passed** (12 retained regression
-tests and 35 additional cases), Python compilation passed, `pip check` found no
+Integration verification: **48 backend tests passed** (12 retained regression
+tests and 36 additional cases), Python compilation passed, `pip check` found no
 broken requirements, and `git diff --check` passed. Git comparison confirmed no
 changes to `frontend/` or `app/ollama.py`.
 

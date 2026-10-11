@@ -142,7 +142,7 @@ def scripted_call(decision="reject", mutate=None, contexts=None):
         plans = facts["current_plans"]
         draft = {"in_reply_to":[m["message_id"] for m in facts["prior_peer_messages"]],
             "tool_calls":[{"tool_name":"route_search", "arguments":{}}] if "route_search" in facts["allowed_tool_names"] else [],
-            "proposed_plan":{k:plans[0][k] for k in ("plan_id","plan_version","route_option_id","commitment_changes")} if plans else None,
+            "proposed_plan":{k:plans[0][k] for k in ("plan_id","plan_version","route_option_id")} if plans else None,
             "reason":"Scripted protocol test, not live AI", "supporting_facts":[], "objections":[],
             "requested_capabilities":[], "evaluations":[{"plan_id":p["plan_id"], "plan_version":p["plan_version"], "decision":decision, "reason":"test"} for p in plans],
             "missing_information":[], "proposal_changed":False, "change_reason":""}
@@ -180,7 +180,7 @@ def test_live_loop_three_total_rounds_and_initial_storage(monkeypatch):
     lambda d: d.update(in_reply_to=["fabricated-message"]),
     lambda d: d.update(requested_capabilities=["invented"]),
     lambda d: d.update(tool_calls=[{"tool_name":"payment", "arguments":{}}]),
-    lambda d: d["proposed_plan"].update(commitment_changes=[]),
+    lambda d: d["proposed_plan"].update(plan_id="invented-plan"),
     lambda d: d.update(objections=[{"challenged_plan_id":"unknown", "challenged_plan_version":1,
                                     "concern":"x", "resolution_needed":"y"}]),
 ])
@@ -315,3 +315,15 @@ def test_multiple_valid_accepted_plans_stay_unresolved(monkeypatch, state):
 def test_incomplete_costs_block_acceptance(state):
     state["scenario"]["options"][-1]["costs_complete"] = False
     assert "complete_additional_costs" in violations(state)
+
+
+def test_anu_plan_selection_attaches_immutable_schedule(monkeypatch, state):
+    # Upstream's selection-only draft ignores extra model schedule content;
+    # the server attaches the actual shared complete plan, never the invented one.
+    monkeypatch.setattr(engine, "call_json", scripted_call(mutate=lambda d:
+        d["proposed_plan"].update(commitment_changes=[{"event_id":"presentation", "after":"invented"}])))
+    plans = candidate_plans(state)
+    asyncio.run(engine._agent_response(state, "Travel", 0, plans))
+    response = state["responses"][-1]
+    assert response["call_status"] == "success"
+    assert response["proposed_plan"]["commitment_changes"] == plans[0]["commitment_changes"]

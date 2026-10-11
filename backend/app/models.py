@@ -23,6 +23,12 @@ class PlanRef(BaseModel):
     commitment_changes: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class AgentPlanSelection(BaseModel):
+    plan_id: str
+    plan_version: int
+    route_option_id: str
+
+
 class Objection(BaseModel):
     challenged_plan_id: str
     challenged_plan_version: int
@@ -41,7 +47,7 @@ class AgentDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
     in_reply_to: list[str] = Field(default_factory=list)
     tool_calls: list[ToolCall] = Field(default_factory=list, max_length=4)
-    proposed_plan: PlanRef | None
+    proposed_plan: AgentPlanSelection | None
     reason: str
     supporting_facts: list[str] = Field(default_factory=list)
     objections: list[Objection] = Field(default_factory=list)
