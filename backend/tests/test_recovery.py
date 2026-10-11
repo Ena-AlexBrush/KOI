@@ -24,6 +24,7 @@ def fresh(scenario_id="nyc_recovery"):
 def test_fixture_leg_costs_and_timezone_are_consistent():
     scenario = copy.deepcopy(FIXTURES["nyc_recovery"])
     option_c = next(item for item in scenario["options"] if item["id"] == "option-c")
+    option_c["discovered"] = True
     assert option_cost(option_c) == 290
     assert option_cost(option_c) == option_c["total_cost_usd"]
     times = [parse_time(leg["depart"]) for leg in option_c["legs"]] + [parse_time(option_c["legs"][-1]["arrive"])]
@@ -41,8 +42,8 @@ def test_original_flight_options_create_real_budget_commitment_conflict():
     scenario = copy.deepcopy(FIXTURES["nyc_recovery"])
     options = {item["id"]: item for item in scenario["options"]}
     state = {"scenario": scenario}
-    assert hard_validation({"route_option_id":"option-a"},state)["violations"] == ["hard_budget"]
-    assert hard_validation({"route_option_id":"option-b"},state)["violations"] == ["mandatory_presentation"]
+    assert hard_validation({"route_option_id":"option-a", "commitment_changes":options["option-a"]["commitment_changes"]},state)["violations"] == ["hard_budget"]
+    assert hard_validation({"route_option_id":"option-b", "commitment_changes":options["option-b"]["commitment_changes"]},state)["violations"] == ["mandatory_presentation"]
     assert hard_validation({"route_option_id":"option-c"},state)["violations"] == ["route_unavailable"]
     assert options["option-a"]["total_cost_usd"] == 380
     assert options["option-b"]["total_cost_usd"] == 200
@@ -68,6 +69,7 @@ def test_infeasible_scenario_never_relaxes_hard_limits():
 def test_agent_schema_and_dataset_reference_validation():
     scenario = copy.deepcopy(FIXTURES["nyc_recovery"])
     scenario["options"][-1]["available"] = True
+    scenario["options"][-1]["discovered"] = True
     draft = AgentDraft.model_validate({
         "proposed_plan":{"plan_id":"plan-option-c","plan_version":1,"route_option_id":"option-c","commitment_changes":[]},
         "reason":"C meets both hard constraints.","supporting_facts":["fixture-option-c"],"objections":[],"requested_capabilities":[],"evaluations":[],"missing_information":[],"proposal_changed":True,"change_reason":"Peer objection changed the plan."
@@ -96,7 +98,8 @@ def test_unanimous_acceptance_requires_valid_same_plan_and_evidence():
     state["alternative_active"] = True
     state["active_agents"] = ["Travel","Budget","Commitments"]
     state["scenario"]["options"][-1]["available"] = True
-    plan = {"plan_id":"plan-option-c","plan_version":1,"route_option_id":"option-c","commitment_changes":[],"evidence_version":1}
+    state["scenario"]["options"][-1]["discovered"] = True
+    plan = next(p for p in candidate_plans(state) if p["route_option_id"] == "option-c")
     for agent in state["active_agents"]:
         state["responses"].append({"round_number":0,"call_status":"success","agent_name":agent,"evidence_version":1,"evaluations":[{"plan_id":plan["plan_id"],"plan_version":1,"decision":"accept","reason":"meets constraints"}]})
     assert _resolve_round(state,[plan],0) is False

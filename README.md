@@ -1,10 +1,12 @@
 # KOI · disruption recovery
 
+Backend integration decisions, validation rules, Windows setup, and live-test status: [backend/INTEGRATION.md](backend/INTEGRATION.md).
+
 KOI coordinates a recovery when a travel change affects the rest of a person's plans.
 
 > A disaster is one change away. Recovery is one decision away.
 
-This hackathon MVP prioritizes the Level 3 challenge: Travel, Budget, and Commitments make independent proposals; Alternatives joins when a peer asks for a mixed route or the flight evidence cannot meet both hard constraints. Agents exchange round 0 messages, respond to actual peer message IDs, and independently evaluate exact plan versions. Only unanimous acceptance plus deterministic hard-constraint validation produces consensus.
+This hackathon MVP targets Level 2 first while preserving Anu's peer-negotiation implementation: Travel, Budget, and Commitments make independent proposals; Alternatives joins when a peer asks for another method or original-method evidence cannot meet the constraints. Agents exchange round 0 messages, respond to actual peer message IDs, and independently evaluate exact plan versions. Only unanimous acceptance plus deterministic validation produces consensus. There are at most three total rounds (0, 1, 2), including reassessment after new information.
 
 All route and price data is synthetic and for demonstration only. KOI does not check live availability or make bookings. A future booking action must require explicit user approval.
 

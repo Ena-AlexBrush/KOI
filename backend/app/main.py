@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import copy
+from contextlib import asynccontextmanager
 from typing import Any
 
 from dotenv import load_dotenv
@@ -10,17 +12,26 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from .engine import STORE, baseline, candidate_plans, demo_reassess, hard_validation, run_runner
+from .engine import STORE, MAX_ROUNDS, candidate_plans, demo_reassess, live_runner, refresh_validations, run_runner, stop_at_limit
 from .models import EvidenceUpdate, RunCreate
 
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
-app = FastAPI(title="KOI Recovery API", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    tasks = [s["_task"] for s in STORE.runs.values() if s.get("_task") and not s["_task"].done()]
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+app = FastAPI(title="KOI Recovery API", version="1.0.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in os.getenv("KOI_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if o.strip()], allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Content-Type", "Last-Event-ID"])
 
 
 def public_state(state: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in state.items() if key not in {"capabilities", "alternative_requested_by", "_task"}}
+    return copy.deepcopy({key: value for key, value in state.items() if key not in {"capabilities", "alternative_requested_by", "_task"}})
 
 
 @app.get("/api/health")
@@ -35,7 +46,10 @@ async def config() -> dict[str, Any]:
 
 @app.post("/api/runs", status_code=202)
 async def create_run(request: RunCreate) -> dict[str, Any]:
-    state = STORE.create(request.scenario_id, request.mode)
+    if request.scenario is not None and request.mode == "demo_playback":
+        raise HTTPException(422, "Scripted playback supports built-in fixtures only; supplied scenarios require live mode.")
+    state = STORE.create(request.scenario_id, request.mode,
+                         request.scenario.model_dump(mode="json", by_alias=True) if request.scenario else None)
     state["_task"] = asyncio.create_task(run_runner(state["run_id"]))
     return public_state(state)
 
@@ -87,26 +101,41 @@ async def add_evidence(run_id: str, update: EvidenceUpdate) -> dict[str, Any]:
     state = STORE.runs.get(run_id)
     if state is None:
         raise HTTPException(404, "Run not found")
-    option = next((item for item in state["scenario"]["options"] if item["id"] == "option-c"), None)
-    if option is None:
-        raise HTTPException(409, "This scenario has no Option C")
-    if not option["available"]:
-        raise HTTPException(409, "Option C is already unavailable")
+    ids = ["option-c"] if update.action == "option_c_unavailable" else update.unavailable_option_ids
+    options = {o["id"]: o for o in state["scenario"]["options"]}
+    if set(ids) - options.keys():
+        raise HTTPException(422, "Unknown option ID")
+    if not ids and not update.traveler_information:
+        raise HTTPException(422, "Supply unavailable_option_ids or traveler_information")
+    if any(not options[option_id]["available"] for option_id in ids):
+        raise HTTPException(409, "Option is already unavailable")
     current_task = state.get("_task")
-    if current_task and not current_task.done():
-        current_task.cancel()
+    if current_task and not current_task.done() and state["mode"] == "demo_playback":
+        raise HTTPException(409, "Wait for scripted playback to finish before updating its evidence")
     old_votes = state["votes"]
-    option["available"] = False
+    for option_id in ids:
+        options[option_id]["available"] = False
+    state["scenario"].setdefault("traveler_information", {}).update(update.traveler_information)
     state["evidence_version"] += 1
     state["votes"] = []
     state["consensus_plan"] = None
     state["status"] = "running"
     state["terminal_status"] = None
+    state["error"] = None
     state["plans"] = candidate_plans(state)
-    STORE.emit(run_id,"evidence_updated",{"action":update.action,"option_id":"option-c","available":False,"evidence_version":state["evidence_version"],"invalidated_vote_count":len(old_votes),"reason":"New fixture information made Option C unavailable. Votes against older evidence are stale and were cleared."})
+    refresh_validations(state)
+    information = {"action": update.action, "option_id": ids[0] if len(ids) == 1 else None,
+                   "unavailable_option_ids": ids, "traveler_information": update.traveler_information,
+                   "available": False, "evidence_version": state["evidence_version"],
+                   "invalidated_vote_count": len(old_votes), "reason": update.reason}
+    state["new_information"].append(information)
+    STORE.emit(run_id,"evidence_updated",information)
     STORE.emit(run_id,"votes_invalidated",{"previous_votes":old_votes,"current_evidence_version":state["evidence_version"]})
-    STORE.emit(run_id,"round_started",{"round_number":max((r["round_number"] for r in state["responses"]),default=0)+1,"evidence_version":state["evidence_version"],"active_agents":state["active_agents"],"plans":state["plans"]})
-    state["_task"] = asyncio.create_task(_reassess(run_id))
+    if not current_task or current_task.done():
+        if state["next_round"] >= MAX_ROUNDS:
+            stop_at_limit(state)
+        else:
+            state["_task"] = asyncio.create_task(_reassess(run_id))
     return public_state(state)
 
 
@@ -115,24 +144,8 @@ async def _reassess(run_id: str) -> None:
     if state["mode"] == "demo_playback":
         await demo_reassess(run_id)
         return
-    round_number = max((r["round_number"] for r in state["responses"]), default=0) + 1
-    plans = candidate_plans(state)
-    state["plans"] = plans
-    from .engine import _agent_response, _resolve_round
-    before = len(state["responses"])
-    await asyncio.gather(*[_agent_response(state, agent, round_number, plans) for agent in state["active_agents"]])
-    failures = [r for r in state["responses"][before:] if r["call_status"] != "success"]
-    if failures:
-        state["status"] = state["terminal_status"] = "error"
-        STORE.emit(run_id,"run_error",{"message":state["error"] or "Agent reassessment failed.","failed_agents":[r["agent_name"] for r in failures]})
-    else:
-        resolved = _resolve_round(state,plans,round_number)
-        if resolved:
-            state["status"] = state["terminal_status"] = "needs_human" if state["missing_information"] else "keep_disagreement"
-            STORE.emit(run_id,"deliberation_stopped",{"status":state["status"],"dissent":state["dissent"],"missing_information":state["missing_information"],"reason":"New evidence was reassessed. Remaining options violate hard constraints; a person must choose how to proceed."})
-    state["baseline"] = baseline(state)
-    STORE.emit(run_id,"baseline",state["baseline"])
-    STORE.emit(run_id,"run_completed",{"status":state["status"],"elapsed_ms":state.get("elapsed_ms"),"baseline":state["baseline"]})
+    # Reuse Anu's one LangGraph loop, including its shared lifetime round budget.
+    await live_runner(run_id)
 
 
 @app.get("/api/runs/{run_id}/export")

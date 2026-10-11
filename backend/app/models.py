@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from .scenario import Scenario
 
 
 Decision = Literal["accept", "reject", "needs_information"]
@@ -38,6 +39,7 @@ class Evaluation(BaseModel):
 
 class AgentDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    in_reply_to: list[str] = Field(default_factory=list)
     tool_calls: list[ToolCall] = Field(default_factory=list, max_length=4)
     proposed_plan: PlanRef | None
     reason: str
@@ -76,10 +78,17 @@ class AgentResponse(BaseModel):
 
 
 class RunCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     scenario_id: Literal["nyc_recovery", "infeasible"] = "nyc_recovery"
     mode: Literal["live", "demo_playback"] = "live"
+    # Optional supplied dataset; uses the same schema as the built-in fixtures.
+    scenario: Scenario | None = None
 
 
 class EvidenceUpdate(BaseModel):
-    action: Literal["option_c_unavailable"]
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["option_c_unavailable", "update_information"]
+    unavailable_option_ids: list[str] = Field(default_factory=list)
+    traveler_information: dict[str, str] = Field(default_factory=dict)
+    reason: str = "Supplied information changed."
 

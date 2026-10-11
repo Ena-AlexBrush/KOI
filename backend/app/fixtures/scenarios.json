@@ -5,19 +5,223 @@
     "destination": "New York conference venue",
     "timezone": "America/New_York",
     "budget_usd": 300,
-    "visa_eligibility": {"status":"not_applicable_domestic","basis":"All synthetic route legs remain within the United States.","source_id":"fixture-domestic-visa-metadata"},
+    "visa_eligibility": {
+      "status": "not_applicable_domestic",
+      "basis": "All synthetic route legs remain within the United States.",
+      "source_id": "fixture-domestic-visa-metadata",
+      "evidence_complete": true
+    },
     "canceled_route_id": "original-flight",
     "itinerary": [
-      {"id":"hotel-check-in","name":"Hotel check-in","time":"2026-10-10T15:00:00-04:00","mandatory":false,"flexible":true},
-      {"id":"presentation","name":"In-person presentation","time":"2026-10-10T17:00:00-04:00","mandatory":true,"flexible":false},
-      {"id":"dinner","name":"Dinner reservation","time":"2026-10-10T19:30:00-04:00","mandatory":false,"flexible":true}
+      {
+        "id": "hotel-check-in",
+        "name": "Hotel check-in",
+        "time": "2026-10-10T15:00:00-04:00",
+        "mandatory": false,
+        "flexible": true,
+        "end": "2026-10-10T15:30:00-04:00",
+        "earliest_start": "2026-10-10T15:00:00-04:00",
+        "latest_end": "2026-10-10T23:00:00-04:00",
+        "allowed_changes": [
+          {
+            "id": "after-presentation",
+            "start": "2026-10-10T18:15:00-04:00",
+            "end": "2026-10-10T18:45:00-04:00",
+            "fee_usd": 0
+          },
+          {
+            "id": "after-late-arrival",
+            "start": "2026-10-10T19:15:00-04:00",
+            "end": "2026-10-10T19:45:00-04:00",
+            "fee_usd": 0
+          }
+        ]
+      },
+      {
+        "id": "presentation",
+        "name": "In-person presentation",
+        "time": "2026-10-10T17:00:00-04:00",
+        "mandatory": true,
+        "flexible": false,
+        "end": "2026-10-10T18:00:00-04:00"
+      },
+      {
+        "id": "dinner",
+        "name": "Dinner reservation",
+        "time": "2026-10-10T19:30:00-04:00",
+        "mandatory": false,
+        "flexible": true,
+        "end": "2026-10-10T20:30:00-04:00",
+        "earliest_start": "2026-10-10T19:30:00-04:00",
+        "latest_end": "2026-10-10T23:00:00-04:00",
+        "allowed_changes": [
+          {
+            "id": "late-dinner",
+            "start": "2026-10-10T21:00:00-04:00",
+            "end": "2026-10-10T22:00:00-04:00",
+            "fee_usd": 0
+          }
+        ]
+      }
     ],
     "options": [
-      {"id":"option-a","name":"Option A · replacement flight","method":"flight","available":true,"legs":[{"mode":"flight","from":"SFO","to":"JFK","depart":"2026-10-10T06:00:00-07:00","arrive":"2026-10-10T14:30:00-04:00","cost_usd":340},{"mode":"ground transfer","from":"JFK","to":"venue","depart":"2026-10-10T15:15:00-04:00","arrive":"2026-10-10T16:00:00-04:00","cost_usd":40}],"total_cost_usd":380,"venue_arrival":"2026-10-10T16:00:00-04:00","source_id":"fixture-option-a"},
-      {"id":"option-b","name":"Option B · replacement flight","method":"flight","available":true,"legs":[{"mode":"flight","from":"SFO","to":"LGA","depart":"2026-10-10T09:00:00-07:00","arrive":"2026-10-10T17:30:00-04:00","cost_usd":170},{"mode":"ground transfer","from":"LGA","to":"venue","depart":"2026-10-10T18:15:00-04:00","arrive":"2026-10-10T19:00:00-04:00","cost_usd":30}],"total_cost_usd":200,"venue_arrival":"2026-10-10T19:00:00-04:00","source_id":"fixture-option-b"},
-      {"id":"option-c","name":"Option C · nearby airport + train","method":"flight + train","available":false,"alternative_only":true,"legs":[{"mode":"flight","from":"SFO","to":"PHL","depart":"2026-10-10T04:00:00-07:00","arrive":"2026-10-10T12:30:00-04:00","cost_usd":220},{"mode":"ground transfer","from":"Philadelphia Airport","to":"30th Street Station","depart":"2026-10-10T13:15:00-04:00","arrive":"2026-10-10T13:45:00-04:00","cost_usd":15},{"mode":"train","from":"Philadelphia 30th Street","to":"New York Penn Station","depart":"2026-10-10T14:00:00-04:00","arrive":"2026-10-10T15:25:00-04:00","cost_usd":40},{"mode":"ground transfer","from":"Penn Station","to":"venue","depart":"2026-10-10T16:00:00-04:00","arrive":"2026-10-10T16:30:00-04:00","cost_usd":15}],"total_cost_usd":290,"venue_arrival":"2026-10-10T16:30:00-04:00","source_id":"fixture-option-c"}
+      {
+        "id": "option-a",
+        "name": "Option A · replacement flight",
+        "method": "flight",
+        "available": true,
+        "legs": [
+          {
+            "mode": "flight",
+            "from": "SFO",
+            "to": "JFK",
+            "depart": "2026-10-10T06:00:00-07:00",
+            "arrive": "2026-10-10T14:30:00-04:00",
+            "cost_usd": 340,
+            "minimum_connection_minutes": 0
+          },
+          {
+            "mode": "ground transfer",
+            "from": "JFK",
+            "to": "New York conference venue",
+            "depart": "2026-10-10T15:15:00-04:00",
+            "arrive": "2026-10-10T16:00:00-04:00",
+            "cost_usd": 40,
+            "minimum_connection_minutes": 30
+          }
+        ],
+        "total_cost_usd": 380,
+        "venue_arrival": "2026-10-10T16:00:00-04:00",
+        "source_id": "fixture-option-a",
+        "costs_complete": true,
+        "entry_requirements_complete": true,
+        "entry_requirements": [],
+        "commitment_changes": [
+          {
+            "event_id": "hotel-check-in",
+            "change_option_id": "after-presentation",
+            "before": "3:00 PM",
+            "after": "6:15 PM",
+            "reason": "Supplied permitted check-in change."
+          }
+        ],
+        "discovered": true
+      },
+      {
+        "id": "option-b",
+        "name": "Option B · replacement flight",
+        "method": "flight",
+        "available": true,
+        "legs": [
+          {
+            "mode": "flight",
+            "from": "SFO",
+            "to": "LGA",
+            "depart": "2026-10-10T09:00:00-07:00",
+            "arrive": "2026-10-10T17:30:00-04:00",
+            "cost_usd": 170,
+            "minimum_connection_minutes": 0
+          },
+          {
+            "mode": "ground transfer",
+            "from": "LGA",
+            "to": "New York conference venue",
+            "depart": "2026-10-10T18:15:00-04:00",
+            "arrive": "2026-10-10T19:00:00-04:00",
+            "cost_usd": 30,
+            "minimum_connection_minutes": 30
+          }
+        ],
+        "total_cost_usd": 200,
+        "venue_arrival": "2026-10-10T19:00:00-04:00",
+        "source_id": "fixture-option-b",
+        "costs_complete": true,
+        "entry_requirements_complete": true,
+        "entry_requirements": [],
+        "commitment_changes": [
+          {
+            "event_id": "hotel-check-in",
+            "change_option_id": "after-late-arrival",
+            "before": "3:00 PM",
+            "after": "7:15 PM",
+            "reason": "Supplied permitted check-in change."
+          },
+          {
+            "event_id": "dinner",
+            "change_option_id": "late-dinner",
+            "before": "7:30 PM",
+            "after": "9:00 PM",
+            "reason": "Supplied permitted dinner change."
+          }
+        ],
+        "discovered": true
+      },
+      {
+        "id": "option-c",
+        "name": "Option C · nearby airport + train",
+        "method": "flight + train",
+        "available": true,
+        "alternative_only": true,
+        "legs": [
+          {
+            "mode": "flight",
+            "from": "SFO",
+            "to": "PHL",
+            "depart": "2026-10-10T04:00:00-07:00",
+            "arrive": "2026-10-10T12:30:00-04:00",
+            "cost_usd": 220,
+            "minimum_connection_minutes": 0
+          },
+          {
+            "mode": "ground transfer",
+            "from": "PHL",
+            "to": "30th Street Station",
+            "depart": "2026-10-10T13:15:00-04:00",
+            "arrive": "2026-10-10T13:45:00-04:00",
+            "cost_usd": 15,
+            "minimum_connection_minutes": 30
+          },
+          {
+            "mode": "train",
+            "from": "30th Street Station",
+            "to": "New York Penn Station",
+            "depart": "2026-10-10T14:00:00-04:00",
+            "arrive": "2026-10-10T15:25:00-04:00",
+            "cost_usd": 40,
+            "minimum_connection_minutes": 15
+          },
+          {
+            "mode": "ground transfer",
+            "from": "New York Penn Station",
+            "to": "New York conference venue",
+            "depart": "2026-10-10T16:00:00-04:00",
+            "arrive": "2026-10-10T16:30:00-04:00",
+            "cost_usd": 15,
+            "minimum_connection_minutes": 30
+          }
+        ],
+        "total_cost_usd": 290,
+        "venue_arrival": "2026-10-10T16:30:00-04:00",
+        "source_id": "fixture-option-c",
+        "costs_complete": true,
+        "entry_requirements_complete": true,
+        "entry_requirements": [],
+        "commitment_changes": [
+          {
+            "event_id": "hotel-check-in",
+            "change_option_id": "after-presentation",
+            "before": "3:00 PM",
+            "after": "6:15 PM",
+            "reason": "Supplied permitted check-in change."
+          }
+        ],
+        "discovered": false
+      }
     ],
-    "note": "Option C route uses the fixture's venue-arrival estimate after the Boston connection; leg schedule detail is synthetic and intended for scenario reasoning, not booking."
+    "note": "Synthetic Philadelphia connection with explicitly supplied costs, transfer minima, domestic evidence, and permitted scheduling changes; not booking data.",
+    "original_method": "flight",
+    "earliest_departure": "2026-10-10T03:00:00-07:00",
+    "traveler_information": {}
   },
   "infeasible": {
     "label": "Synthetic infeasible travel fixture — not live availability",
@@ -25,18 +229,221 @@
     "destination": "New York conference venue",
     "timezone": "America/New_York",
     "budget_usd": 180,
-    "visa_eligibility": {"status":"not_applicable_domestic","basis":"All synthetic route legs remain within the United States.","source_id":"fixture-domestic-visa-metadata"},
+    "visa_eligibility": {
+      "status": "not_applicable_domestic",
+      "basis": "All synthetic route legs remain within the United States.",
+      "source_id": "fixture-domestic-visa-metadata",
+      "evidence_complete": true
+    },
     "canceled_route_id": "original-flight",
     "itinerary": [
-      {"id":"hotel-check-in","name":"Hotel check-in","time":"2026-10-10T15:00:00-04:00","mandatory":false,"flexible":true},
-      {"id":"presentation","name":"In-person presentation","time":"2026-10-10T17:00:00-04:00","mandatory":true,"flexible":false},
-      {"id":"dinner","name":"Dinner reservation","time":"2026-10-10T19:30:00-04:00","mandatory":false,"flexible":true}
+      {
+        "id": "hotel-check-in",
+        "name": "Hotel check-in",
+        "time": "2026-10-10T15:00:00-04:00",
+        "mandatory": false,
+        "flexible": true,
+        "end": "2026-10-10T15:30:00-04:00",
+        "earliest_start": "2026-10-10T15:00:00-04:00",
+        "latest_end": "2026-10-10T23:00:00-04:00",
+        "allowed_changes": [
+          {
+            "id": "after-presentation",
+            "start": "2026-10-10T18:15:00-04:00",
+            "end": "2026-10-10T18:45:00-04:00",
+            "fee_usd": 0
+          },
+          {
+            "id": "after-late-arrival",
+            "start": "2026-10-10T19:15:00-04:00",
+            "end": "2026-10-10T19:45:00-04:00",
+            "fee_usd": 0
+          }
+        ]
+      },
+      {
+        "id": "presentation",
+        "name": "In-person presentation",
+        "time": "2026-10-10T17:00:00-04:00",
+        "mandatory": true,
+        "flexible": false,
+        "end": "2026-10-10T18:00:00-04:00"
+      },
+      {
+        "id": "dinner",
+        "name": "Dinner reservation",
+        "time": "2026-10-10T19:30:00-04:00",
+        "mandatory": false,
+        "flexible": true,
+        "end": "2026-10-10T20:30:00-04:00",
+        "earliest_start": "2026-10-10T19:30:00-04:00",
+        "latest_end": "2026-10-10T23:00:00-04:00",
+        "allowed_changes": [
+          {
+            "id": "late-dinner",
+            "start": "2026-10-10T21:00:00-04:00",
+            "end": "2026-10-10T22:00:00-04:00",
+            "fee_usd": 0
+          }
+        ]
+      }
     ],
     "options": [
-      {"id":"option-a","name":"Option A · replacement flight","method":"flight","available":true,"legs":[{"mode":"flight","from":"SFO","to":"JFK","depart":"2026-10-10T06:00:00-07:00","arrive":"2026-10-10T14:30:00-04:00","cost_usd":340},{"mode":"ground transfer","from":"JFK","to":"venue","depart":"2026-10-10T15:15:00-04:00","arrive":"2026-10-10T16:00:00-04:00","cost_usd":40}],"total_cost_usd":380,"venue_arrival":"2026-10-10T16:00:00-04:00","source_id":"fixture-option-a"},
-      {"id":"option-b","name":"Option B · replacement flight","method":"flight","available":true,"legs":[{"mode":"flight","from":"SFO","to":"LGA","depart":"2026-10-10T09:00:00-07:00","arrive":"2026-10-10T17:30:00-04:00","cost_usd":170},{"mode":"ground transfer","from":"LGA","to":"venue","depart":"2026-10-10T18:15:00-04:00","arrive":"2026-10-10T19:00:00-04:00","cost_usd":30}],"total_cost_usd":200,"venue_arrival":"2026-10-10T19:00:00-04:00","source_id":"fixture-option-b"},
-      {"id":"option-c","name":"Option C · nearby airport + train","method":"flight + train","available":false,"alternative_only":true,"legs":[{"mode":"flight","from":"SFO","to":"PHL","depart":"2026-10-10T04:00:00-07:00","arrive":"2026-10-10T12:30:00-04:00","cost_usd":220},{"mode":"ground transfer","from":"Philadelphia Airport","to":"30th Street Station","depart":"2026-10-10T13:15:00-04:00","arrive":"2026-10-10T13:45:00-04:00","cost_usd":15},{"mode":"train","from":"Philadelphia 30th Street","to":"New York Penn Station","depart":"2026-10-10T14:00:00-04:00","arrive":"2026-10-10T15:25:00-04:00","cost_usd":40},{"mode":"ground transfer","from":"Penn Station","to":"venue","depart":"2026-10-10T16:00:00-04:00","arrive":"2026-10-10T16:30:00-04:00","cost_usd":15}],"total_cost_usd":290,"venue_arrival":"2026-10-10T16:30:00-04:00","source_id":"fixture-option-c"}
-    ]
+      {
+        "id": "option-a",
+        "name": "Option A · replacement flight",
+        "method": "flight",
+        "available": true,
+        "legs": [
+          {
+            "mode": "flight",
+            "from": "SFO",
+            "to": "JFK",
+            "depart": "2026-10-10T06:00:00-07:00",
+            "arrive": "2026-10-10T14:30:00-04:00",
+            "cost_usd": 340,
+            "minimum_connection_minutes": 0
+          },
+          {
+            "mode": "ground transfer",
+            "from": "JFK",
+            "to": "New York conference venue",
+            "depart": "2026-10-10T15:15:00-04:00",
+            "arrive": "2026-10-10T16:00:00-04:00",
+            "cost_usd": 40,
+            "minimum_connection_minutes": 30
+          }
+        ],
+        "total_cost_usd": 380,
+        "venue_arrival": "2026-10-10T16:00:00-04:00",
+        "source_id": "fixture-option-a",
+        "costs_complete": true,
+        "entry_requirements_complete": true,
+        "entry_requirements": [],
+        "commitment_changes": [
+          {
+            "event_id": "hotel-check-in",
+            "change_option_id": "after-presentation",
+            "before": "3:00 PM",
+            "after": "6:15 PM",
+            "reason": "Supplied permitted check-in change."
+          }
+        ],
+        "discovered": true
+      },
+      {
+        "id": "option-b",
+        "name": "Option B · replacement flight",
+        "method": "flight",
+        "available": true,
+        "legs": [
+          {
+            "mode": "flight",
+            "from": "SFO",
+            "to": "LGA",
+            "depart": "2026-10-10T09:00:00-07:00",
+            "arrive": "2026-10-10T17:30:00-04:00",
+            "cost_usd": 170,
+            "minimum_connection_minutes": 0
+          },
+          {
+            "mode": "ground transfer",
+            "from": "LGA",
+            "to": "New York conference venue",
+            "depart": "2026-10-10T18:15:00-04:00",
+            "arrive": "2026-10-10T19:00:00-04:00",
+            "cost_usd": 30,
+            "minimum_connection_minutes": 30
+          }
+        ],
+        "total_cost_usd": 200,
+        "venue_arrival": "2026-10-10T19:00:00-04:00",
+        "source_id": "fixture-option-b",
+        "costs_complete": true,
+        "entry_requirements_complete": true,
+        "entry_requirements": [],
+        "commitment_changes": [
+          {
+            "event_id": "hotel-check-in",
+            "change_option_id": "after-late-arrival",
+            "before": "3:00 PM",
+            "after": "7:15 PM",
+            "reason": "Supplied permitted check-in change."
+          },
+          {
+            "event_id": "dinner",
+            "change_option_id": "late-dinner",
+            "before": "7:30 PM",
+            "after": "9:00 PM",
+            "reason": "Supplied permitted dinner change."
+          }
+        ],
+        "discovered": true
+      },
+      {
+        "id": "option-c",
+        "name": "Option C · nearby airport + train",
+        "method": "flight + train",
+        "available": true,
+        "alternative_only": true,
+        "legs": [
+          {
+            "mode": "flight",
+            "from": "SFO",
+            "to": "PHL",
+            "depart": "2026-10-10T04:00:00-07:00",
+            "arrive": "2026-10-10T12:30:00-04:00",
+            "cost_usd": 220,
+            "minimum_connection_minutes": 0
+          },
+          {
+            "mode": "ground transfer",
+            "from": "PHL",
+            "to": "30th Street Station",
+            "depart": "2026-10-10T13:15:00-04:00",
+            "arrive": "2026-10-10T13:45:00-04:00",
+            "cost_usd": 15,
+            "minimum_connection_minutes": 30
+          },
+          {
+            "mode": "train",
+            "from": "30th Street Station",
+            "to": "New York Penn Station",
+            "depart": "2026-10-10T14:00:00-04:00",
+            "arrive": "2026-10-10T15:25:00-04:00",
+            "cost_usd": 40,
+            "minimum_connection_minutes": 15
+          },
+          {
+            "mode": "ground transfer",
+            "from": "New York Penn Station",
+            "to": "New York conference venue",
+            "depart": "2026-10-10T16:00:00-04:00",
+            "arrive": "2026-10-10T16:30:00-04:00",
+            "cost_usd": 15,
+            "minimum_connection_minutes": 30
+          }
+        ],
+        "total_cost_usd": 290,
+        "venue_arrival": "2026-10-10T16:30:00-04:00",
+        "source_id": "fixture-option-c",
+        "costs_complete": true,
+        "entry_requirements_complete": true,
+        "entry_requirements": [],
+        "commitment_changes": [
+          {
+            "event_id": "hotel-check-in",
+            "change_option_id": "after-presentation",
+            "before": "3:00 PM",
+            "after": "6:15 PM",
+            "reason": "Supplied permitted check-in change."
+          }
+        ],
+        "discovered": false
+      }
+    ],
+    "original_method": "flight",
+    "earliest_departure": "2026-10-10T03:00:00-07:00",
+    "traveler_information": {}
   }
 }
-
